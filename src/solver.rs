@@ -3,9 +3,18 @@ use std::collections::HashSet;
 
 
 #[derive(Clone, Copy)]
-struct Placement {
+pub struct Placement {
     piece_idx: usize,
     mask: u64,
+}
+
+impl Placement {
+    pub fn get_label(&self) -> char {
+        PIECE_LABELS[self.piece_idx]
+    }
+    pub fn get_mask(&self) -> u64 {
+        self.mask
+    }
 }
 
 fn normalize(coords: &[Coord]) -> Vec<Coord> {
@@ -245,5 +254,9 @@ impl Solver {
     
     pub fn get_placement_count(&self) -> usize {
         self.placements.len()
+    }
+
+    pub fn get_placement(&self, p_idx: usize) -> &Placement {
+        &self.placements[p_idx]
     }
 }
