@@ -50,35 +50,6 @@ fn generate_orientations(base: &[Coord]) -> Vec<Vec<Coord>> {
     unique.into_iter().collect()
 }
 
-fn generate_all_placements() -> Vec<Placement> {
-    let mut placements = Vec::new();
-
-    for (p_idx, base_coords) in PIECE_SHAPES.iter().enumerate() {
-        let orientations = generate_orientations(base_coords);
-
-        for shape in orientations {
-            let max_r = shape.iter().map(|&(r, _)| r).max().unwrap();
-            let max_c = shape.iter().map(|&(_, c)| c).max().unwrap();
-
-            for offset_r in 0..(HEIGHT as i32 - max_r) {
-                for offset_c in 0..(WIDTH as i32 - max_c) {
-                    let mut mask = 0u64;
-                    for &(r, c) in &shape {
-                        let cell_idx = ((offset_r + r) as usize) * WIDTH + ((offset_c + c) as usize);
-                        mask |= 1u64 << cell_idx;
-                    }
-                    placements.push(Placement {
-                        piece_idx: p_idx,
-                        mask,
-                    });
-                }
-            }
-        }
-    }
-
-    placements
-}
-
 pub struct Solver {
     cell_placements: Vec<Vec<usize>>,
     placements: Vec<Placement>,
@@ -86,13 +57,37 @@ pub struct Solver {
 
 impl Solver {
     pub fn new() -> Self {
-        let placements = generate_all_placements();
+        let mut placements = Vec::new();
+
+        for (p_idx, base_coords) in PIECE_SHAPES.iter().enumerate() {
+            let orientations = generate_orientations(base_coords);
+
+            for shape in orientations {
+                let max_r = shape.iter().map(|&(r, _)| r).max().unwrap();
+                let max_c = shape.iter().map(|&(_, c)| c).max().unwrap();
+
+                for offset_r in 0..(HEIGHT as i32 - max_r) {
+                    for offset_c in 0..(WIDTH as i32 - max_c) {
+                        let mut mask = 0u64;
+                        for &(r, c) in &shape {
+                            let cell_idx = ((offset_r + r) as usize) * WIDTH + ((offset_c + c) as usize);
+                            mask |= 1u64 << cell_idx;
+                        }
+                        placements.push(Placement {
+                            piece_idx: p_idx,
+                            mask,
+                        });
+                    }
+                }
+            }
+        }
+
         let mut cell_placements = vec![Vec::new(); NUM_CELLS];
 
         for (idx, p) in placements.iter().enumerate() {
             for c in 0..NUM_CELLS {
                 if (p.mask & (1u64 << c)) != 0 {
-                    cell_placements[c].push(idx);
+                        cell_placements[c].push(idx);
                 }
             }
         }
