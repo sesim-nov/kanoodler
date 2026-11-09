@@ -11,3 +11,8 @@ eframe = "0.27.2"
 [[bin]]
 name = "kanoodler"
 path = "src/main.rs"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1" # Forwards Rust panics to the browser console
+wasm-bindgen-futures = "0.4"

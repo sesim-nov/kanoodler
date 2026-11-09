@@ -1,4 +1,3 @@
-use std::time::Instant;
 use kanoodler::solver::Solver;
 use kanoodler::board::*;
 use eframe::egui;
@@ -88,7 +87,7 @@ impl eframe::App for KanoodleApp {
             ui.add_space(10.0);
 
             if ui.button("Solve Board").clicked() {
-                let start_solve = Instant::now();
+                //let start_solve = Instant::now();
                 
                 // Build bitmasks dynamically from the visually placed pieces
                 let mut board_mask = 0u64;
@@ -115,7 +114,7 @@ impl eframe::App for KanoodleApp {
                 self.solver.solve(board_mask, piece_mask, &mut current_solution, &mut solutions, 1);
                 
                 if let Some(first) = solutions.first() {
-                    self.status = format!("Solved in {:?}", start_solve.elapsed());
+                    self.status = format!("Solved!");
                     
                     // The solver returns indices of newly placed pieces. We parse them and add to GUI.
                     for &p_idx in first {
@@ -327,9 +326,13 @@ impl eframe::App for KanoodleApp {
     }
 }
 
+// ---------------------------------------------
+// NATIVE (Desktop) ENTRY POINT
+// ---------------------------------------------
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
+        viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([900.0, 500.0])
             .with_title("Kanoodle Drag & Drop Solver"),
         ..Default::default()
@@ -337,6 +340,30 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Kanoodle Solver",
         options,
-        Box::new(|_cc| Box::<KanoodleApp>::default()),
+        Box::new(|_cc| Box::new(KanoodleApp::default())),
     )
+}
+
+// ---------------------------------------------
+// WEB (Wasm) ENTRY POINT
+// ---------------------------------------------
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    // Redirect panics to the browser console so you can see errors
+    console_error_panic_hook::set_once();
+
+    let web_options = eframe::WebOptions::default();
+
+    // The new eframe web runner requires an async execution environment
+    wasm_bindgen_futures::spawn_local(async {
+        let runner = eframe::WebRunner::new();
+        runner
+            .start(
+                "the_canvas_id", 
+                web_options, 
+                Box::new(|_cc| Box::new(KanoodleApp::default())), // Matches your desktop setup
+            )
+            .await
+            .expect("failed to start eframe");
+    });
 }
