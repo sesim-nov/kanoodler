@@ -133,6 +133,56 @@ impl Solver {
         }
     }
 
+    /// Parses a 2D ASCII grid representation of the initial board state.
+    /// Returns (initial_board_mask, initial_piece_mask, initial_solution_indices)
+    fn parse_initial_state(&self, grid: &[&str]) -> Result<(u64, u16, Vec<usize>), String> {
+        if grid.len() != HEIGHT {
+            return Err(format!("Grid must have {} rows", HEIGHT));
+        }
+
+        let mut piece_masks = std::collections::HashMap::new();
+
+        // 1. Build a target bitmask for each character found on the grid
+        for (r, row) in grid.iter().enumerate() {
+            let chars: Vec<char> = row.chars().filter(|c| !c.is_whitespace()).collect();
+            if chars.len() != WIDTH {
+                return Err(format!("Row {} must have {} columns (ignoring spaces)", r, WIDTH));
+            }
+
+            for (c, &ch) in chars.iter().enumerate() {
+                if ch != '.' {
+                    let cell_idx = r * WIDTH + c;
+                    let mask = piece_masks.entry(ch).or_insert(0u64);
+                    *mask |= 1u64 << cell_idx;
+                }
+            }
+        }
+
+        let mut board_mask = 0u64;
+        let mut piece_mask = 0u16;
+        let mut initial_solution = Vec::new();
+
+        // 2. Match each constructed mask to a valid precomputed Placement
+        for (ch, target_mask) in piece_masks {
+            let p_idx = PIECE_LABELS
+                .iter()
+                .position(|&l| l == ch)
+                .ok_or_else(|| format!("Invalid piece label on board: {}", ch))?;
+
+            let matching_placement_idx = self
+                .placements
+                .iter()
+                .position(|p| p.piece_idx == p_idx && p.mask == target_mask)
+                .ok_or_else(|| format!("Invalid geometry or placement for piece '{}'", ch))?;
+
+            board_mask |= target_mask;
+            piece_mask |= 1 << p_idx;
+            initial_solution.push(matching_placement_idx);
+        }
+
+        Ok((board_mask, piece_mask, initial_solution))
+    }
+
     fn solve(
         &self,
         board_mask: u64,
@@ -242,18 +292,40 @@ fn main() {
         start_init.elapsed()
     );
 
-    let mut current_solution = Vec::with_capacity(NUM_PIECES);
+    // Define a starting challenge (e.g., Level 1 from the manual)
+    // Use '.' for empty spaces. Spaces between characters are ignored.
+    let initial_board = [
+        "J J J J . . . . . . .",
+        "C C B . . . . . . . .",
+        "C B B . . . . . . . .",
+        "C B B . . . . . . . .",
+        "C . . . . . . . . . .",
+    ];
+
+    let (board_mask, piece_mask, mut current_solution) = solver
+        .parse_initial_state(&initial_board)
+        .expect("Failed to parse initial state");
+
+    println!("\nStarting Puzzle State:");
+    solver.print_board(&current_solution);
+
     let mut solutions = Vec::new();
 
     let start_solve = Instant::now();
-    solver.solve(0, 0, &mut current_solution, &mut solutions, 1);
+    solver.solve(
+        board_mask,
+        piece_mask,
+        &mut current_solution,
+        &mut solutions,
+        1,
+    );
 
-    println!("Solved in {:?}", start_solve.elapsed());
+    println!("\nSolved in {:?}", start_solve.elapsed());
 
     if let Some(first) = solutions.first() {
-        println!("\nFirst valid solution found:");
+        println!("Solution:");
         solver.print_board(first);
     } else {
-        println!("No solution found.");
+        println!("No solution found for this configuration.");
     }
 }
