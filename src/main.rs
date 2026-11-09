@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::time::Instant;
 
 const WIDTH: usize = 11;
 const HEIGHT: usize = 5;
@@ -7,46 +8,53 @@ const NUM_PIECES: usize = 12;
 
 type Coord = (i32, i32);
 
-// Canonical piece shapes defined as relative (row, col) coordinates
+// Official Kanoodle pieces transcribed directly from the reference image.
+// Total beads = 55 (matches the 11x5 board exactly).
 const PIECE_SHAPES: [&[Coord]; NUM_PIECES] = [
-    &[(0, 0), (0, 1), (0, 2), (1, 0)], // L-tromino variant / 4-bead (Piece A)
-    &[(0, 0), (0, 1), (0, 2), (1, 1)], // T-tetromino (Piece B)
-    &[(0, 0), (0, 1), (1, 0), (1, 1)], // 2x2 Square (Piece C)
-    &[(0, 0), (0, 1), (0, 2), (0, 3)], // I-tetromino (Piece D)
-    &[(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)], // P-pentomino (Piece E)
-    &[(0, 0), (0, 1), (0, 2), (1, 0), (2, 0)], // V-pentomino / Corner (Piece F)
-    &[(0, 0), (0, 1), (0, 2), (0, 3), (1, 0)], // L-pentomino (Piece G)
-    &[(0, 0), (0, 1), (0, 2), (1, 1), (1, 2)], // Z-pentomino (Piece H)
-    &[(0, 0), (0, 1), (0, 2), (1, 1), (2, 1)], // T-pentomino (Piece I)
-    &[(0, 0), (0, 1), (0, 2), (1, 0), (1, 2)], // U-pentomino (Piece J)
-    &[(0, 1), (1, 0), (1, 1), (1, 2), (2, 1)], // X-pentomino / Cross (Piece K)
-    &[(0, 0), (0, 1), (1, 1), (1, 2), (2, 2)], // W-pentomino (Piece L)
+    // A (Orange) - L-tetromino (4)
+    &[(0, 1), (1, 1), (2, 0), (2, 1)],
+    // B (Red) - P-pentomino (5)
+    &[(0, 1), (1, 0), (1, 1), (2, 0), (2, 1)],
+    // C (Dark Blue) - Long L-pentomino (5)
+    &[(0, 1), (1, 1), (2, 1), (3, 0), (3, 1)],
+    // D (Light Pink) - Y-pentomino (5)
+    &[(0, 1), (1, 1), (2, 0), (2, 1), (3, 1)],
+    // E (Dark Green) - N-pentomino (5)
+    &[(0, 1), (1, 1), (2, 0), (2, 1), (3, 0)],
+    // F (White) - V-triomino (3)
+    &[(0, 1), (1, 0), (1, 1)],
+    // G (Light Blue) - V-pentomino (5)
+    &[(0, 2), (1, 2), (2, 0), (2, 1), (2, 2)],
+    // H (Bright Pink) - W-pentomino (5)
+    &[(0, 2), (1, 1), (1, 2), (2, 0), (2, 1)],
+    // I (Yellow) - U-pentomino (5)
+    &[(0, 0), (0, 2), (1, 0), (1, 1), (1, 2)],
+    // J (Purple) - I-tetromino (4)
+    &[(0, 0), (1, 0), (2, 0), (3, 0)],
+    // K (Light Green) - O-tetromino (4)
+    &[(0, 0), (0, 1), (1, 0), (1, 1)],
+    // L (Grey) - X-pentomino (5)
+    &[(0, 1), (1, 0), (1, 1), (1, 2), (2, 1)],
 ];
 
-const PIECE_LABELS: [char; NUM_PIECES] =
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+const PIECE_LABELS: [char; NUM_PIECES] = [
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+];
 
-/// A single placement of a piece on the board
 #[derive(Clone, Copy)]
 struct Placement {
     piece_idx: usize,
-    mask: u64, // 55 bits used to represent occupied cells
+    mask: u64,
 }
 
-impl {
-    /// Normalize coordinates so the minimum row and minimum col are 0
-    fn normalize(coords: &[Coord]) -> Vec<Coord> {
-        let min_r = coords.iter().map(|&(r, _)| r).min().unwrap_or(0);
-        let min_c = coords.iter().map(|&(_, c)| c).min().unwrap_or(0);
-        let mut normalized: Vec<Coord> = coords
-            .iter()
-            .map(|&(r, c)| (r - min_r, c - min_c))
-            .collect();
-        normalized.sort();
-        normalized
-    }
+fn normalize(coords: &[Coord]) -> Vec<Coord> {
+    let min_r = coords.iter().map(|&(r, _)| r).min().unwrap_or(0);
+    let min_c = coords.iter().map(|&(_, c)| c).min().unwrap_or(0);
+    let mut normalized: Vec<Coord> = coords.iter().map(|&(r, c)| (r - min_r, c - min_c)).collect();
+    normalized.sort();
+    normalized
 }
-/// Generate all unique rotations and reflections for a piece shape
+
 fn generate_orientations(base: &[Coord]) -> Vec<Vec<Coord>> {
     let mut unique = HashSet::new();
 
@@ -72,7 +80,6 @@ fn generate_orientations(base: &[Coord]) -> Vec<Vec<Coord>> {
     unique.into_iter().collect()
 }
 
-/// Precompute all valid legal placements across the board
 fn generate_all_placements() -> Vec<Placement> {
     let mut placements = Vec::new();
 
@@ -87,9 +94,7 @@ fn generate_all_placements() -> Vec<Placement> {
                 for offset_c in 0..(WIDTH as i32 - max_c) {
                     let mut mask = 0u64;
                     for &(r, c) in &shape {
-                        let row = offset_r + r;
-                        let col = offset_c + c;
-                        let cell_idx = (row as usize) * WIDTH + (col as usize);
+                        let cell_idx = ((offset_r + r) as usize) * WIDTH + ((offset_c + c) as usize);
                         mask |= 1u64 << cell_idx;
                     }
                     placements.push(Placement {
@@ -104,9 +109,8 @@ fn generate_all_placements() -> Vec<Placement> {
     placements
 }
 
-/// Pre-index placements covering each cell for O(1) branch lookups
 struct Solver {
-    cell_placements: Vec<Vec<usize>>, // cell_idx -> list of placement indices
+    cell_placements: Vec<Vec<usize>>,
     placements: Vec<Placement>,
 }
 
@@ -129,7 +133,6 @@ impl Solver {
         }
     }
 
-    /// Backtracking search (Knuth's Algorithm X on bitsets)
     fn solve(
         &self,
         board_mask: u64,
@@ -142,28 +145,28 @@ impl Solver {
             return;
         }
 
-        // All 55 cells filled
+        // All 55 cells covered
         if board_mask == (1u64 << NUM_CELLS) - 1 {
             solutions.push(current_solution.clone());
             return;
         }
 
-        // Exact Cover Heuristic: Choose the uncovered cell with minimum valid branches
+        // Select the uncovered cell with the fewest valid candidate placements (MRV)
         let mut best_cell = None;
         let mut min_candidates = usize::MAX;
 
         for cell in 0..NUM_CELLS {
             if (board_mask & (1u64 << cell)) == 0 {
-                let candidates = self.cell_placements[cell]
-                    .iter()
-                    .filter(|&&p_idx| {
-                        let p = &self.placements[p_idx];
-                        (piece_mask & (1 << p.piece_idx)) == 0 && (board_mask & p.mask) == 0
-                    })
-                    .count();
+                let mut candidates = 0;
+                for &p_idx in &self.cell_placements[cell] {
+                    let p = &self.placements[p_idx];
+                    if (piece_mask & (1 << p.piece_idx)) == 0 && (board_mask & p.mask) == 0 {
+                        candidates += 1;
+                    }
+                }
 
+                // Unfillable cell detected; prune entire branch
                 if candidates == 0 {
-                    // Dead end: this cell cannot be covered
                     return;
                 }
 
@@ -182,7 +185,6 @@ impl Solver {
             None => return,
         };
 
-        // Try placing valid candidate pieces over chosen_cell
         for &p_idx in &self.cell_placements[chosen_cell] {
             let p = &self.placements[p_idx];
 
@@ -232,22 +234,26 @@ impl Solver {
 }
 
 fn main() {
+    let start_init = Instant::now();
     let solver = Solver::new();
     println!(
-        "Total legal placements precomputed: {}",
-        solver.placements.len()
+        "Precomputed {} valid placements in {:?}",
+        solver.placements.len(),
+        start_init.elapsed()
     );
 
     let mut current_solution = Vec::with_capacity(NUM_PIECES);
     let mut solutions = Vec::new();
 
-    // Find the first solution
+    let start_solve = Instant::now();
     solver.solve(0, 0, &mut current_solution, &mut solutions, 1);
 
+    println!("Solved in {:?}", start_solve.elapsed());
+
     if let Some(first) = solutions.first() {
-        println!("\nSolution found:");
+        println!("\nFirst valid solution found:");
         solver.print_board(first);
     } else {
-        println!("No solutions found.");
+        println!("No solution found.");
     }
 }
